@@ -1,7 +1,7 @@
 ---
-title: "Untitled"
-author: "Michael Clark"
-date: "July 25, 2017"
+title: 'Untitled'
+author: 'Michael Clark'
+date: 'July 25, 2017'
 output: html_document
 runtime: shiny
 ---
@@ -16,26 +16,184 @@ library(tidycensus); library(tidyverse); library(lazerhawk)
 census_api_key(readr::read_file('census_api'))
 ```
 
-```{r}
+```{r, eval=FALSE}
 # also get_acs
-tables <- c("P0030002","P0030003","P0030004","P0030005","P0030006","P0030007","P0030008")
-c2010 <- get_decennial(geography = "block", state='Michigan', county='Washtenaw', variables=tables, year = 2010, geometry=T)
+tables <- c('P0030001', 'P0030002','P0030003','P0030004','P0030005','P0030006','P0030007','P0030008')
+# P0030001	Total population	P3. RACE [8]	not required	0	(not a predicate)	N/A 	N/A
+# P0030002	White alone	P3. RACE [8]	not required	0	(not a predicate)	N/A 	N/A
+# P0030003	Black or African American alone	P3. RACE [8]	not required	0	(not a predicate)	N/A 	N/A
+# P0030004	American Indian and Alaska Native alone	P3. RACE [8]	not required	0	(not a predicate)	N/A 	N/A
+# P0030005	Asian alone	P3. RACE [8]	not required	0	(not a predicate)	N/A 	N/A
+# P0030006	Native Hawaiian and Other Pacific Islander alone	P3. RACE [8]	not required	0	(not a predicate)	N/A 	N/A
+# P0030007	Some Other Race alone	P3. RACE [8]	not required	0	(not a predicate)	N/A 	N/A
+# P0030008	Two or More Races
+c2010_block <- get_decennial(geography = 'block', state='Michigan', county='Washtenaw', 
+                             variables=tables, year = 2010, geometry=T, keep_geo_vars = T,
+                             summary_var = 'P0010001')
+c2010_tract <- get_decennial(geography = 'tract', state='Michigan', county='Washtenaw', 
+                       variables=tables, year = 2010, geometry=T, keep_geo_vars = T,
+                       summary_var = 'P0010001')
+c2010_tract_MI <- get_decennial(geography = 'tract', state='Michigan', 
+                                variables=tables, year = 2010, geometry=T, keep_geo_vars = T,
+                                summary_var = 'P0010001')
 
-head(c2010)
-
+glimpse(c2010_block)
+glimpse(c2010_tract)
+glimpse(c2010_tract_state)
+save(c2010_block, file='data/washtenaw_block.RData')
+save(c2010_tract, file='data/washtenaw_tract.RData')
+save(c2010_tract_MI, file='data/michigan_tract.RData')
 ```
 
 ```{r}
+load('data/washtenaw_block.RData')
+load('data/washtenaw_tract.RData')
 # ggplot is still not viable for detailed spatial plots.
+
 library(viridis)
-c2010 %>%
-  filter(value>0) %>% 
-  ggplot(aes(fill = value, color = value)) + 
-  geom_sf() + 
-  coord_sf(crs = 26911) + 
-  scale_fill_viridis(option = "magma") + 
-  scale_color_viridis(option = "magma") +
+c2010_tract %>%
+  filter(value>0, variable=='P0030001') %>%
+  mutate(pop_density=value/CENSUSAREA,
+         log_pop_density = log(pop_density)) %>% 
+  ggplot(aes(fill = pop_density, color = pop_density)) + 
+  geom_sf(show.legend = T) + 
+  scale_fill_viridis(option = 'plasma') +
+  scale_color_viridis(option = 'plasma') +
+  theme_trueMinimal()
+
+
+c2010_tract_MI %>%
+  filter(value>0, variable=='P0030001') %>%
+  mutate(pop_density=value/CENSUSAREA,
+         log_pop_density = log(pop_density)) %>% 
+  # filter(log_pop_density >  median(log_pop_density)) %>%
+  ggplot(aes(fill = log_pop_density)) + 
+  geom_sf(show.legend = T, color=NA) + # either this or as aesthetic color = fillvar
+  scale_fill_viridis(option = 'plasma', begin=0, name='Population Density') +
+  # scale_color_viridis(option = 'plasma') +
+  theme_trueMinimal() +
+  theme(legend.title = element_text())
+
+c2010_tract_state %>%
+  filter(value>0, variable=='P0030001') %>%
+  mutate(pop_density=value/CENSUSAREA,
+         log_pop_density = log(pop_density)) %>% 
+  filter(log_pop_density >  median(log_pop_density)) %>%
+  ggplot(aes(fill = pop_density)) + 
+  geom_sf(show.legend = T, color=NA) + # either this or as aesthetic color = fillvar
+  scale_x_continuous(trans = 'log10') + 
+  scale_fill_viridis(option = 'plasma', begin=.25, name='Population Density') +
+  # scale_color_viridis(option = 'plasma') +
+  theme_trueMinimal() +
+  theme(legend.title = element_text())
+
+# c2010_tract_state %>%
+#   filter(variable=='P0030001') %>%
+#   mutate(pop_density=value/CENSUSAREA,
+#          log_pop_density = log(pop_density),
+#          pop_prop = value/sum(summary_value)) %>% 
+#   ggplot(aes(fill = pop_prop, color = pop_prop)) + 
+#   geom_sf(show.legend = T) + 
+#   scale_fill_viridis(option = 'plasma') +
+#   scale_color_viridis(option = 'plasma') +
+#   theme_trueMinimal()
+
+
+c2010_block %>%
+  filter(value>0, variable=='P0030001') %>% # value > 0 will uncover water and similar
+  # mutate(pop = value/summary_value) %>%
+  ggplot(aes(fill = value, color = value)) +
+  geom_sf() +
+  scale_fill_viridis(option = 'plasma') +
+  scale_color_viridis(option = 'plasma') +
   theme_trueMinimal()
 ```
 
+
+```{r state_comparison}
+# load('data/michigan_tract.RData')
+
+library(parallel)
+cl = makeCluster(11)
+clusterEvalQ(cl, list(library(tidycensus), library(tidyverse)))
+clusterExport(cl, 'tables')
+multistate_list  = parLapply(cl, c(state.name[-c(2,11)], 'District of Columbia'), function(st) get_decennial(geography = 'tract', state=st,
+                                                                                                             variables=tables, year = 2010, geometry=T,
+                                                                                                             keep_geo_vars = T,
+                                                                                                             summary_var = 'P0010001'))
+stopCluster(cl)
+save(multistate_list, file='data/continentalUS_DC_tract_aslist.RData')
+
+multistate = reduce(multistate_list, rbind)
+
+save(multistate, file='data/continentalUS_DC_tract.RData')
+
+
+fips = unique(multistate$STATE)
+# multistate %>%
+init = multistate_list[[1]] %>%
+  as.tibble() %>% 
+  # droplevels() %>%
+  filter(variable=='P0030001', CENSUSAREA>0, value>0) %>% #value>0,
+  # group_by(STATE) %>%   # not necessary except mayb
+  mutate(pop_density = value/CENSUSAREA,
+         log_pop_density = log(pop_density)) %>%
+  # drop_na() %>% 
+  filter(log_pop_density >  quantile(log_pop_density, probs=.5)[1]) %>%
+  # filter(STATE %in% unique(multistate$STATE)[1]) %>%
+  # ungroup %>% 
+  # filter(STATE %in% fips[3]) %>% 
+  ggplot(aes(fill = log_pop_density)) + 
+  geom_sf(show.legend = T, color=NA) + # either this or as aesthetic color = fillvar
+  # scale_x_continuous(trans = 'log10') + 
+  scale_fill_viridis(option = 'plasma', begin=.25, name='Population Density') +
+  # scale_color_viridis(option = 'plasma') +
+  theme_trueMinimal()
+
+init + geom_sf(show.legend = T, color=NA, data=multistate_list[[2]])
+```
+
+
+
+
+
+```{r}
+multistate_list = multistate_list %>% 
+  lapply(function(x) as.tibble(x) %>% 
+  filter(variable=='P0030001', CENSUSAREA>0, value>0) %>%
+  mutate(pop_density = value/CENSUSAREA,
+         log_pop_density = log(pop_density)) %>%
+  filter(log_pop_density >  quantile(log_pop_density, probs=.5)[1]))
+
+
+mp = multistate_list[[1]] %>%
+  ggplot(aes(fill = log_pop_density)) + 
+  geom_sf(show.legend = T, color=NA) + # either this or as aesthetic color = fillvar
+  # scale_x_continuous(trans = 'log10') + 
+  scale_fill_viridis(option = 'plasma', begin=.25, name='Population Density') +
+  # scale_color_viridis(option = 'plasma') +
+  theme_trueMinimal()
+
+for (i in 2:length(multistate_list)){
+  mp = mp + geom_sf(show.legend = T, color=NA, data=multistate_list[[i]])
+}
+mp
+```
+
+
+
+```{r acs}
+acs_tables = c('B00001_001E', paste0('B02001_00', 1:10, 'E')) # E is the actual estimate
+
+library(parallel)
+cl = makeCluster(11)
+clusterEvalQ(cl, list(library(tidycensus), library(tidyverse)))
+clusterExport(cl, 'tables')
+multistate_list  = parLapply(cl, c(state.name[-c(2,11)], 'District of Columbia'), function(st) get_decennial(geography = 'tract', state=st,
+                                                                                                             variables='B00001_001E', year = 2010,
+                                                                                                             geometry=T,
+                                                                                                             keep_geo_vars = T,
+                                                                                                             summary_var = 'B00001_001E'))
+stopCluster(cl)
+```
 
