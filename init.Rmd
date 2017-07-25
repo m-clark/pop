@@ -1,0 +1,41 @@
+---
+title: "Untitled"
+author: "Michael Clark"
+date: "July 25, 2017"
+output: html_document
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE, echo=FALSE}
+library(tidycensus); library(tidyverse); library(lazerhawk)
+
+census_api_key(readr::read_file('census_api'))
+```
+
+```{r}
+# also get_acs
+tables <- c("P0030002","P0030003","P0030004","P0030005","P0030006","P0030007","P0030008")
+c2010 <- get_decennial(geography = "block", state='Michigan', county='Washtenaw', variables=tables, year = 2010, geometry=T)
+
+head(c2010)
+
+```
+
+```{r}
+# ggplot is still not viable for detailed spatial plots.
+library(viridis)
+c2010 %>%
+  filter(value>0) %>% 
+  ggplot(aes(fill = value, color = value)) + 
+  geom_sf() + 
+  coord_sf(crs = 26911) + 
+  scale_fill_viridis(option = "magma") + 
+  scale_color_viridis(option = "magma") +
+  theme_trueMinimal()
+```
+
+
