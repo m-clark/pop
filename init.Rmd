@@ -158,26 +158,49 @@ init + geom_sf(show.legend = T, color=NA, data=multistate_list[[2]])
 
 
 ```{r}
-multistate_list = multistate_list %>% 
-  lapply(function(x) as.tibble(x) %>% 
-  filter(variable=='P0030001', CENSUSAREA>0, value>0) %>%
-  mutate(pop_density = value/CENSUSAREA,
-         log_pop_density = log(pop_density)) %>%
-  filter(log_pop_density >  quantile(log_pop_density, probs=.5)[1]))
+load('data/continentalUS_DC_tract.RData')
 
-
-mp = multistate_list[[1]] %>%
-  ggplot(aes(fill = log_pop_density)) + 
-  geom_sf(show.legend = T, color=NA) + # either this or as aesthetic color = fillvar
-  # scale_x_continuous(trans = 'log10') + 
-  scale_fill_viridis(option = 'plasma', begin=.25, name='Population Density') +
-  # scale_color_viridis(option = 'plasma') +
-  theme_trueMinimal()
-
-for (i in 2:length(multistate_list)){
-  mp = mp + geom_sf(show.legend = T, color=NA, data=multistate_list[[i]])
+map_percentile_density <- function(multistate_list, percentile=.5, save_plot=F) {
+  require(tidyverse)
+  multistate_list_perc = multistate_list %>% 
+    lapply(function(x) as.tibble(x) %>% 
+    filter(variable == 'P0030001', CENSUSAREA > 0, value > 0) %>%
+    mutate(pop_density = value/CENSUSAREA,
+           log_pop_density = log(pop_density)) %>%
+    filter(log_pop_density >  quantile(log_pop_density, probs=percentile)))
+  
+  # base plot
+  map_perc = multistate_list_perc[[1]] %>%
+    ggplot(aes(fill = log_pop_density)) + 
+    geom_sf(show.legend = T, color=NA) + 
+    scale_fill_viridis(option = 'plasma', begin=.25, name='Population Density') +
+    lazerhawk::theme_trueMinimal()
+  
+  # add rest
+  for (i in 2:length(multistate_list)) {
+    map_perc = map_perc + geom_sf(show.legend = T, color=NA, data=multistate_list[[i]])
+  }
+  
+  # find minimum pop density
+  minval = round(exp(min(map_dbl(multistate_list_perc,  function(x) min(x$log_pop_density)))))
+  
+  if (save_plot) ggsave(map_perc, paste0('vis/us_', stringr::str_sub(as.character(percentile), start = 2), '_perc.RData'))
+  map_perc + ggtitle(glue::glue('Areas where population density > ', minval))
 }
-mp
+
+# debugonce(map_percentile_density)
+map_percentile_density(multistate_list, percentile = .1)
+
+usmap <- get_decennial(geography = 'state', state = state.abb[!state.abb %in% c('AK', 'HI')],
+                       variables=tables, year = 2010, geometry=T, keep_geo_vars = T,
+                       summary_var = 'P0010001')
+
+usmap %>%
+  filter(NAME.x != 'Alaska', NAME.x != 'Hawaii') %>% 
+  ggplot() + 
+  geom_sf(show.legend = T, color=NA) +
+    lazerhawk::theme_trueMinimal() 
+last() +  map_percentile_density(multistate_list, percentile = .1)
 ```
 
 
