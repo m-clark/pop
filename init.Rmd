@@ -158,7 +158,7 @@ init + geom_sf(show.legend = T, color=NA, data=multistate_list[[2]])
 
 
 ```{r}
-load('data/continentalUS_DC_tract.RData')
+load('data/continentalUS_DC_tract_aslist.RData')
 
 map_percentile_density <- function(multistate_list, percentile=.5, save_plot=F) {
   require(tidyverse)
@@ -178,7 +178,7 @@ map_percentile_density <- function(multistate_list, percentile=.5, save_plot=F) 
   
   # add rest
   for (i in 2:length(multistate_list)) {
-    map_perc = map_perc + geom_sf(show.legend = T, color=NA, data=multistate_list[[i]])
+    map_perc = map_perc + geom_sf(show.legend = T, color=NA, data=multistate_list_perc[[i]])
   }
   
   # find minimum pop density
@@ -201,6 +201,28 @@ usmap %>%
   geom_sf(show.legend = T, color=NA) +
     lazerhawk::theme_trueMinimal() 
 last() +  map_percentile_density(multistate_list, percentile = .1)
+```
+
+```{r summary_explore}
+data("fips_codes")
+multistate %>% 
+  rename(state_code=STATE) %>% 
+  group_by(state_code) %>% 
+  filter(CENSUSAREA>0, value>0) %>% 
+  summarise(
+    MinArea=min(CENSUSAREA), 
+    MaxArea=max(CENSUSAREA),
+    MedianArea=median(CENSUSAREA),
+    MinPop=min(value), 
+    MaxPop=max(value),
+    MedianPop=median(value),
+    MinDensity=min(value/CENSUSAREA), 
+    MaxDensity=max(value/CENSUSAREA),
+    MedianDensity=median(value/CENSUSAREA)
+    ) %>% 
+  inner_join(distinct(fips_codes, state, state_code)) %>% 
+  DT::datatable()
+
 ```
 
 
